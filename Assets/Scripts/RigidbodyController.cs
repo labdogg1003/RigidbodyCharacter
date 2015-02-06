@@ -1,67 +1,93 @@
 ﻿using UnityEngine;
 using System.Collections;
 
-
 [RequireComponent (typeof (Rigidbody))]
+[RequireComponent (typeof (CapsuleCollider))]
 
 public class RigidbodyController : MonoBehaviour
 {
-	public float xForce;  // Forward/Backward Force(speed)
-	public float zForce;  // Sideways Force(speed)
-	public float yForce;  // Jump Force(speed)
-
-	Vector3 forward = Vector3.forward;
-	Vector3 side = Vector3.right;      
-	Vector3 up = Vector3.up;
-
-	float gravity = 20.0f;
-
-	Camera playerCamera;
 	Rigidbody rigidbody;
 	bool isGrounded;
+	bool usingController;
+
+	public float speed = 6.0f;
+	public float gravity = 20.0f;
+	public float maxVelocityChange = 10.0f;
+	public float jumpHeight = 2.0f;
+
+	//public float runMultiplier;
 
 	// Use this for initialization
 	void Start ()
 	{
-
 		//Grab Rigidbody so we aren't calling it each cycle
 		rigidbody = gameObject.GetComponent<Rigidbody>();
-		playerCamera = Camera.main;
 
-		//Set Up Initial Rigidbody Parameters
-		rigidbody.useGravity = true;
+		//We Want To Manually Calculate Gravity. i.e. Be Able To Change The Value Of Gravity.
+		rigidbody.useGravity = false;
+
+		//Stop RigidBody From Rotating Freely and Falling down.
 		rigidbody.freezeRotation = true;
 	}
 	
 	// Update is called once per phyisics cycle
 	void FixedUpdate ()
-	{	   	
-		//Jump using "Jump" Button by adding force in y direction.
+	{
+		//Check If We Are On The Ground
 		if(isGrounded)
 		{
-			//Rigidbody.movePosition to walk in x and z directions
-			//Add Force creates unwanted effects like sliding
-			rigidbody.MovePosition(rigidbody.position + new Vector3(playerCamera.transform.forward.x,0,playerCamera.transform.forward.z) * xForce * Input.GetAxis("Vertical") * Time.deltaTime);
-			rigidbody.MovePosition(rigidbody.position + new Vector3(playerCamera.transform.right.x,0,playerCamera.transform.right.z) * zForce * Input.GetAxis("Horizontal") * Time.deltaTime);
+			Vector3 targetVelocity;
 
-			if(Input.GetButton("Jump"))
+			// Translate Input Into A Vector3
+			if(!usingController)
 			{
+				targetVelocity = new Vector3(Input.GetAxis("Horizontal"), 0, Input.GetAxis("Vertical"));
+			}
+			else
+			{
+				targetVelocity = new Vector3(Input.GetAxis("Horizontal"), 0, Input.GetAxis("Vertical"));
+			}
 
-				rigidbody.AddForce(up * yForce, ForceMode.Impulse);
-				Debug.Log(up * yForce * Time.deltaTime);
+			// Calculate how fast we should be moving
+			targetVelocity = transform.TransformDirection(targetVelocity);
+			targetVelocity *= speed;
+
+			// Apply a force that attempts to reach our target velocity
+			Vector3 velocity = rigidbody.velocity;
+			Vector3 velocityChange = (targetVelocity - velocity);
+
+			//Clamp All 3 Axis So That Player Does Not Acclerate Faster Than Velocity Change.
+			velocityChange.x = Mathf.Clamp(velocityChange.x, -maxVelocityChange, maxVelocityChange);
+			velocityChange.z = Mathf.Clamp(velocityChange.z, -maxVelocityChange, maxVelocityChange);
+
+			//Don'T Allow Changes In Y Without "Jump" Being Pressed
+			velocityChange.y = 0;
+
+			//Attempt To 
+			rigidbody.AddForce(velocityChange, ForceMode.VelocityChange);
+
+		    //Jump using "Jump" Button by adding force in y direction.
+			if (Input.GetButton("Jump"))
+			{
+				rigidbody.velocity = new Vector3(velocity.x, CalculateJumpVerticalSpeed(), velocity.z);
 			}
 		}
+
+		//Manually Add In Gravity
+		rigidbody.AddForce(new Vector3 (0, -gravity * rigidbody.mass, 0));
+
+		isGrounded = false;
+	}
+
+	float CalculateJumpVerticalSpeed () {
+		// From the jump height and gravity we deduce the upwards speed 
+		// for the character to reach at the apex.
+		return Mathf.Sqrt(2 * jumpHeight * gravity);
 	}
 
 	//Check If Player Is Grounded
 	void OnCollisionStay (Collision collisionInfo)
 	{
 		isGrounded = true;
-	}
-
-	//Check If Player Is Not Grounded
-	void OnCollisionExit (Collision collisionInfo)
-	{
-		isGrounded = false;
 	}
 }
